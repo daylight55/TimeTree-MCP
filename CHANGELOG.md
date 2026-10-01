@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `start_before`, `query`, `label_id`, and `include_memos` filters to `get_events`.
 
 ### Changed
+- Node.js 22 or later is now required. Node.js 18 and 20 are past end-of-life; CI tests Node.js 22 and 24.
 - `get_events` now returns events sorted by start time, so `limit` keeps the earliest matches.
 - Every tool now accepts `calendar_id` as a string or a number, matching the string IDs returned by `list_calendars`.
 
