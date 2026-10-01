@@ -12,7 +12,7 @@ Use Claude, Codex, Cursor, Windsurf, and other MCP clients to read and manage yo
 
 ### Features
 
-- ➕ **Create Calendars** - Create a calendar without inviting members
+- 🗓️ **Create Calendars** - Create a calendar without inviting members
 - 📅 **List Calendars** - Get all your TimeTree calendars
 - 📆 **Get Events** - Retrieve events from any calendar with automatic pagination
 - ➕ **Create Events** - Add new events to your calendars
