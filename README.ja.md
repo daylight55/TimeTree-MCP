@@ -21,6 +21,8 @@ Claude、Codex、Cursor、Windsurf などの MCP クライアントから、Time
 - 🗒️ **メモ管理** - TimeTree メモの一覧取得、作成、更新、削除
 - 💬 **コメント管理** - イベントコメントの追加、一覧取得、更新、削除
 - 🏷️ **カレンダーメタデータ** - ラベルの取得/更新、メンバー/仮想メンバーの確認
+- 🎌 **祝日** - 国と期間を指定して祝日を取得
+- 🕘 **最近のアクティビティ** - 誰が予定やメモを作成・変更・削除したかを確認
 - 🔐 **安全な認証** - メールアドレス/パスワード認証（MCP 設定にのみ保存）
 - ⚡ **レート制限** - Token Bucket アルゴリズムで API 負荷を抑制
 - 🔄 **自動ページネーション** - 複数ページにまたがるイベントを自動取得
@@ -29,7 +31,7 @@ Claude、Codex、Cursor、Windsurf などの MCP クライアントから、Time
 
 ### 必要条件
 
-- Node.js >= 18.0.0
+- Node.js >= 22
 - Git（インストール用）
 - TimeTree アカウント
 - MCP 対応クライアント（Claude Desktop、Claude Code、Codex、Antigravity、Cline など）
@@ -124,7 +126,7 @@ npm run build
 
 - **create_calendar** - 名前（1〜20文字）と用途を指定してカレンダーを作成。メンバー招待は行いません
 - **list_calendars** - 参加ユーザー情報付きですべてのカレンダーを一覧表示
-- **get_events** - 自動ページネーションでカレンダーのイベントを取得
+- **get_events** - 自動ページネーションでカレンダーのイベントを取得（開始時刻順、キーワード/ラベル/期間フィルター、期間内の繰り返し予定を展開）
 - **get_updated_events** - 指定時刻以降に更新されたイベントを取得（効率的な差分同期）
 - **create_event** - カレンダーに新しいイベントを作成（通知、繰り返し、参加者、チェックリストに対応）
 - **update_event** - 既存イベントを更新
@@ -133,6 +135,8 @@ npm run build
 - **add_event_comment / list_event_comments / update_event_comment / delete_event_comment** - イベントコメントを管理
 - **get_calendar_labels / update_calendar_labels** - カレンダーラベルを取得またはマージ更新
 - **get_calendar_members / get_calendar_virtual_members** - カレンダーメンバーのメタデータを取得
+- **get_holidays** - 期間内の祝日と記念日を取得
+- **get_recent_activity** - 最近変更された予定とメモ、変更者を取得
 
 📖 パラメータと詳しい使い方は [COMMANDS.md](COMMANDS.md) を参照してください。
 

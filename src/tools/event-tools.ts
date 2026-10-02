@@ -8,15 +8,38 @@ import type { TimeTreeAPIClient } from '../client/api.js';
 import { InvalidCalendarError } from '../client/api.js';
 import { logger } from '../utils/logger.js';
 import { getLabelColorName } from '../types/label-colors.js';
+import { CALENDAR_ID_JSON_SCHEMA, CalendarIdSchema } from './shared-schemas.js';
+import { expandRecurrence, parseRecurrence } from '../utils/recurrence.js';
+import type { Event } from '../types/timetree.js';
+
+const MAX_OCCURRENCES_PER_EVENT = 500;
 
 export const GetEventsInputSchema = z.object({
-  calendar_id: z.string().describe('The calendar ID to fetch events from'),
+  calendar_id: CalendarIdSchema.describe('The calendar ID to fetch events from'),
   start_after: z
     .number()
     .optional()
     .describe(
       'Optional Unix timestamp in milliseconds. Only return events starting after this time.'
     ),
+  start_before: z
+    .number()
+    .optional()
+    .describe('Optional Unix timestamp in milliseconds. Only return events starting before this time.'),
+  query: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Optional case-insensitive keyword matched against title, note, and location.'),
+  label_id: z.number().int().min(1).max(10).optional().describe('Optional label ID (1-10) filter.'),
+  include_memos: z
+    .boolean()
+    .default(true)
+    .describe('Whether to include memos (category=2). Defaults to true.'),
+  expand_recurring: z
+    .boolean()
+    .default(true)
+    .describe('When start_before is set, return each recurring occurrence in the range. Defaults to true.'),
   limit: z
     .number()
     .optional()
@@ -24,7 +47,7 @@ export const GetEventsInputSchema = z.object({
 });
 
 export const GetUpdatedEventsInputSchema = z.object({
-  calendar_id: z.string().describe('The calendar ID to fetch updated events from'),
+  calendar_id: CalendarIdSchema.describe('The calendar ID to fetch updated events from'),
   updated_after: z
     .number()
     .describe('Unix timestamp in milliseconds. Only return events updated after this time.'),
@@ -38,22 +61,43 @@ export function createGetEventsTool(apiClient: TimeTreeAPIClient) {
   return {
     name: 'get_events',
     description:
-      'Get all events from a specific TimeTree calendar. Automatically handles pagination to fetch all events. ' +
+      'Get events from a specific TimeTree calendar, sorted by start time. Automatically handles pagination. ' +
+      'Supports filtering by start time range, keyword, label, and whether to include memos. ' +
+      'When start_before is set, recurring events are expanded into their occurrences within the range ' +
+      '(occurrences share the series uuid; editing one edits the whole series). ' +
       'Returns event details including title, start/end times, location, notes, label color, and more. ' +
       'Label colors (label_id 1-10): 1=Emerald green, 2=Modern cyan, 3=Deep sky blue, 4=Pastel brown, ' +
       '5=Midnight black, 6=Apple red, 7=French rose, 8=Coral pink, 9=Bright orange, 10=Soft violet.',
     inputSchema: {
       type: 'object',
       properties: {
-        calendar_id: {
-          type: 'string',
-          description: 'The calendar ID to fetch events from',
-        },
+        calendar_id: CALENDAR_ID_JSON_SCHEMA,
         start_after: {
           type: 'number',
           description:
             'Optional Unix timestamp in milliseconds. Only return events starting after this time. ' +
             'If user provides a date like "2026-02-01", convert it to Unix timestamp (e.g., 1769904000000).',
+        },
+        start_before: {
+          type: 'number',
+          description: 'Optional Unix timestamp in milliseconds. Only return events starting before this time.',
+        },
+        query: {
+          type: 'string',
+          description: 'Optional case-insensitive keyword matched against title, note, and location.',
+        },
+        label_id: {
+          type: 'number',
+          description: 'Optional label ID (1-10) filter.',
+        },
+        include_memos: {
+          type: 'boolean',
+          description: 'Whether to include memos (category=2). Defaults to true.',
+        },
+        expand_recurring: {
+          type: 'boolean',
+          description:
+            'When start_before is set, return each recurring occurrence in the range instead of only the series start. Defaults to true.',
         },
         limit: {
           type: 'number',
@@ -65,17 +109,57 @@ export function createGetEventsTool(apiClient: TimeTreeAPIClient) {
     handler: async (args: unknown) => {
       try {
         const input = GetEventsInputSchema.parse(args);
-        const { calendar_id, start_after, limit } = input;
+        const { start_after, start_before, query, label_id, include_memos, expand_recurring, limit } = input;
+        const calendar_id = String(input.calendar_id);
 
-        logger.info('Tool: get_events called', { calendar_id, start_after, limit });
+        logger.info('Tool: get_events called', { calendar_id, start_after, start_before, limit });
 
         const events = await apiClient.getEventsByCalendar(calendar_id, 0);
 
-        // Filter by start_after if provided
-        let filteredEvents = events;
-        if (start_after) {
-          filteredEvents = events.filter((event) => event.start_at > start_after);
+        const keyword = query?.toLowerCase();
+        const matchingEvents = events
+          .filter((event) => label_id === undefined || event.label_id === label_id)
+          .filter((event) => include_memos || event.category !== 2)
+          .filter(
+            (event) =>
+              keyword === undefined ||
+              [event.title, event.note, event.location].some((field) =>
+                field?.toLowerCase().includes(keyword)
+              )
+          );
+
+        const inRange = (startAt: number) =>
+          (start_after === undefined || startAt > start_after) &&
+          (start_before === undefined || startAt < start_before);
+
+        // Each entry is one row in the result: a single event or one occurrence of a series.
+        let filteredEvents: Array<{ event: Event; start_at: number; end_at: number; occurrence: boolean }> = [];
+        const truncatedSeries: string[] = [];
+        for (const event of matchingEvents) {
+          const recurrence =
+            expand_recurring && start_before !== undefined ? parseRecurrence(event.recurrences) : null;
+
+          if (!recurrence || start_before === undefined) {
+            if (inRange(event.start_at)) {
+              filteredEvents.push({ event, start_at: event.start_at, end_at: event.end_at, occurrence: false });
+            }
+            continue;
+          }
+
+          const duration = event.end_at - event.start_at;
+          const { occurrences, truncated } = expandRecurrence(recurrence, {
+            start: event.start_at,
+            timeZone: event.start_timezone,
+            windowStart: start_after === undefined ? Number.NEGATIVE_INFINITY : start_after + 1,
+            windowEnd: start_before,
+            maxOccurrences: MAX_OCCURRENCES_PER_EVENT,
+          });
+          for (const startAt of occurrences) {
+            filteredEvents.push({ event, start_at: startAt, end_at: startAt + duration, occurrence: true });
+          }
+          if (truncated) truncatedSeries.push(event.uuid);
         }
+        filteredEvents.sort((a, b) => a.start_at - b.start_at);
 
         // Limit results if provided
         if (limit) {
@@ -83,12 +167,12 @@ export function createGetEventsTool(apiClient: TimeTreeAPIClient) {
         }
 
         // Format events for better readability
-        const formattedEvents = filteredEvents.map((event) => ({
+        const formattedEvents = filteredEvents.map(({ event, start_at, end_at, occurrence }) => ({
           uuid: event.uuid,
           title: event.title,
-          start_at: new Date(event.start_at).toISOString(),
+          start_at: new Date(start_at).toISOString(),
           start_timezone: event.start_timezone || null,
-          end_at: new Date(event.end_at).toISOString(),
+          end_at: new Date(end_at).toISOString(),
           end_timezone: event.end_timezone || null,
           all_day: event.all_day,
           label_id: event.label_id || null,
@@ -109,6 +193,7 @@ export function createGetEventsTool(apiClient: TimeTreeAPIClient) {
           has_recurrence: event.recurrences && event.recurrences.length > 0,
           checklist: event.attachment?.checklist || null,
           virtual_user_attendees: event.attachment?.virtual_user_attendees || [],
+          ...(occurrence && { is_recurring_occurrence: true, series_start_at: new Date(event.start_at).toISOString() }),
         }));
 
         const result = {
@@ -116,6 +201,10 @@ export function createGetEventsTool(apiClient: TimeTreeAPIClient) {
           events: formattedEvents,
           total: formattedEvents.length,
           total_fetched: events.length,
+          ...(truncatedSeries.length && {
+            truncated_series: truncatedSeries,
+            truncation_note: `Each recurring series is limited to ${MAX_OCCURRENCES_PER_EVENT} occurrences; narrow start_after/start_before to see the rest.`,
+          }),
         };
 
         logger.info('Tool: get_events completed', {
@@ -162,7 +251,7 @@ export function createGetEventsTool(apiClient: TimeTreeAPIClient) {
                 text: JSON.stringify(
                   {
                     error: 'Invalid input',
-                    message: 'Please provide a valid calendar_id (string)',
+                    message: 'Please provide a valid calendar_id',
                     details: (error as any).errors,
                   },
                   null,
@@ -207,10 +296,7 @@ export function createGetUpdatedEventsTool(apiClient: TimeTreeAPIClient) {
     inputSchema: {
       type: 'object',
       properties: {
-        calendar_id: {
-          type: 'string',
-          description: 'The calendar ID to fetch updated events from',
-        },
+        calendar_id: CALENDAR_ID_JSON_SCHEMA,
         updated_after: {
           type: 'number',
           description:
@@ -227,7 +313,8 @@ export function createGetUpdatedEventsTool(apiClient: TimeTreeAPIClient) {
     handler: async (args: unknown) => {
       try {
         const input = GetUpdatedEventsInputSchema.parse(args);
-        const { calendar_id, updated_after, limit } = input;
+        const { updated_after, limit } = input;
+        const calendar_id = String(input.calendar_id);
 
         logger.info('Tool: get_updated_events called', { calendar_id, updated_after, limit });
 
@@ -320,7 +407,7 @@ export function createGetUpdatedEventsTool(apiClient: TimeTreeAPIClient) {
                 text: JSON.stringify(
                   {
                     error: 'Invalid input',
-                    message: 'Please provide valid calendar_id (string) and updated_after (number) parameters',
+                    message: 'Please provide valid calendar_id and updated_after (number) parameters',
                     details: (error as any).errors,
                   },
                   null,
