@@ -15,11 +15,13 @@ function pathSegment(value: string): string {
 }
 
 /** Keep in sync with package.json (checked by tests). */
-export const SERVER_VERSION = '0.3.0';
+export const SERVER_VERSION = '0.4.0';
 
 /** Latest published version: package.json on the default branch, which users install from. */
 export const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/ehs208/TimeTree-MCP/main/package.json';
 export const CHANGELOG_URL = 'https://github.com/ehs208/TimeTree-MCP/blob/main/CHANGELOG.md';
+/** Claude Desktop extension (.mcpb) downloads. */
+export const RELEASES_URL = 'https://github.com/ehs208/TimeTree-MCP/releases/latest';
 
 export const TIMETREE_CONFIG = {
   // Base URLs for TimeTree APIs.
