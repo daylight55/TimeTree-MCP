@@ -94,6 +94,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "Choose your MCP client:"
 echo ""
+echo "Tip: for Claude Desktop on macOS or Windows, the one-click extension needs no config file:"
+echo "     https://github.com/ehs208/TimeTree-MCP/releases/latest (download the .mcpb file and open it)"
+echo ""
 echo "1️⃣  Claude Desktop (macOS)"
 echo "2️⃣  Claude Desktop (Windows)"
 echo "3️⃣  Claude Code (CLI)"
@@ -188,12 +191,11 @@ EOF
 
 File: ~/.codex/config.toml
 
-[[mcp.servers]]
-name = "timetree"
+[mcp_servers.timetree]
 command = "$NODE_BIN"
 args = ["$DIST_PATH"]
 
-[mcp.servers.env]
+[mcp_servers.timetree.env]
 TIMETREE_EMAIL = "your-email@example.com"
 TIMETREE_PASSWORD = "your-password"
 

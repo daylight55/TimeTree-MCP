@@ -8,13 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Added `create_calendar` using the web API v2 calendar creation endpoint and existing CSRF authentication, without member invitations. Both name and purpose are required; requests use rate limiting and retry only HTTP 429. Input and authentication errors are distinguishable without forwarding upstream details.
+- Added `create_calendar` without member invitations, requiring an explicit name and purpose. Uses existing rate limiting and authentication recovery without retrying timeouts or server errors.
+- Calendar creation distinguishes invalid fields and authentication failures without forwarding upstream details.
+
+### Security
+- Updated locked MCP SDK and proxy-addr dependencies to resolve high and critical audit findings.
+
+## [0.4.0] - 2026-10-03
+
+### Added
+- Claude Desktop extension (`.mcpb`) for macOS and Windows: download it from GitHub releases and open it to install. Claude Desktop asks for the TimeTree email and password, so no clone, build, or config file is needed. Nothing is published to npm.
+- GitHub releases: each version tag gets a release with the extension attached and the changelog section as release notes.
+- The update notice tells extension users to download the latest release instead of running `git pull`.
 - Added `get_holidays` for public holidays and memorial days by country and date range.
 - Added `start_before`, `query`, `label_id`, and `include_memos` filters to `get_events`.
 - `get_events` expands recurring events into their occurrences when `start_before` is set (`expand_recurring`, default on). EXDATE exceptions are honored.
 - Added `get_recent_activity` for the calendar's recent change feed with member names.
+- The server checks `main` for a newer version on startup and adds a one-time update notice to the next tool response. Set `TIMETREE_UPDATE_CHECK=false` to disable.
+- `get_updated_events` marks deleted events with `deleted` and `deleted_at`.
 
 ### Changed
+- README rewritten in English, Korean, and Japanese: example prompts, a demo image, user-facing features, and the one-click extension as the first install option for Claude Desktop.
 - Node.js 22 or later is now required. Node.js 18 and 20 are past end-of-life; CI tests Node.js 22 and 24.
 - `get_events` now returns events sorted by start time, so `limit` keeps the earliest matches.
 - Every tool now accepts `calendar_id` as a string or a number, matching the string IDs returned by `list_calendars`.
@@ -23,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Event and memo URLs are now saved. TimeTree stores them in the attachment, so the top-level `url` was previously ignored.
 - Clearing a checklist with `checklist: []` no longer fails with HTTP 400.
 - Updating only the URL or only the checklist no longer drops the other attachment field.
+- The server signs in again when TimeTree rejects an expired session or CSRF token, instead of failing every call until restart. Concurrent first calls share one sign-in, and sign-in requests go through the rate limiter.
+- Unknown calendars, missing events, and rejected CSRF tokens now return the matching error messages. TimeTree reports these as HTTP 400/422 with error codes, which were previously shown as generic failures.
+- Event and memo responses now include the saved URL instead of `null`.
+- `get_updated_events` now reads every page of the event feed and filters by `updated_at`, instead of passing `updated_after` as the `since` sync cursor and reading only the first page.
+- `delete_event` and `delete_memo` report a missing event as not found; TimeTree answers such deletes with success. A delete is no longer sent twice after a timeout or server error.
+- Event, memo, comment, and calendar IDs are validated before they are used in request paths, so a crafted ID cannot redirect a request to another endpoint.
+- `update_memo` and `delete_memo` refuse regular events instead of converting them into memos or deleting them.
+- Fixed the Codex `config.toml` example in the docs and installer output (`[mcp_servers.timetree]`).
+- Added a Japanese section to DISCLAIMER.md.
 
 ## [0.3.0] - 2026-05-25
 

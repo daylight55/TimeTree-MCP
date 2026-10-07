@@ -19,7 +19,7 @@ Before creating a bug report:
 3. Test with different credentials/calendars to isolate the issue
 
 When reporting a bug, include:
-- MCP server version (`npm run build` output)
+- MCP server version (`version` in `package.json`)
 - Node.js version (`node --version`)
 - Operating system
 - Steps to reproduce
@@ -73,7 +73,7 @@ Feature suggestions are welcome, but keep in mind:
 ```bash
 git clone https://github.com/ehs208/TimeTree-MCP.git
 cd TimeTree-MCP
-npm install
+npm ci
 npm run build
 ```
 
@@ -95,7 +95,8 @@ TimeTree-MCP/
 │   │   ├── logger.ts             # Structured logging (stderr only)
 │   │   ├── http-client.ts        # HTTP wrapper (native fetch)
 │   │   ├── rate-limiter.ts       # Token bucket rate limiter
-│   │   └── recurrence.ts         # RRULE/EXDATE expansion for get_events
+│   │   ├── recurrence.ts         # RRULE/EXDATE expansion for get_events
+│   │   └── update-check.ts       # Startup check for a newer version
 │   ├── client/
 │   │   ├── auth.ts               # Authentication + CSRF token manager
 │   │   └── api.ts                # TimeTree API client (read + CRUD)
@@ -192,11 +193,25 @@ When adding features:
 
 ## Release Process
 
+Nothing is published to npm, and `package.json` keeps `"private": true`. Users install in one of two ways:
+
+- **Git clone of `main`.** A version bump on `main` reaches them: running servers compare their version with `package.json` on `main` and show an update notice when it is newer.
+- **Claude Desktop extension (`.mcpb`).** Attached to a GitHub release. The same update notice points these users at the latest release.
+
 Maintainers will:
-1. Update version in `package.json`
-2. Update CHANGELOG.md
-3. Create a git tag (`v0.x.x`)
-4. Create a GitHub release
+1. Update `version` in `package.json`, `package-lock.json`, `mcpb/manifest.json`, and `SERVER_VERSION` in `src/config/config.ts` (tests check they match)
+2. Move the `[Unreleased]` entries in CHANGELOG.md under the new version with the date
+3. Merge to `main`
+4. Right after the merge, tag the merge commit and push the tag:
+   ```bash
+   git tag v0.4.0
+   git push origin v0.4.0
+   ```
+   The Release workflow (`.github/workflows/release.yml`) runs the tests, builds `build/timetree-mcp-<version>.mcpb`, and creates a GitHub release with the CHANGELOG section as release notes. It fails if the tag does not match `package.json` or the CHANGELOG has no section for that version.
+
+Tag soon after merging: extension users see the update notice as soon as `main` has the new version.
+
+To build the extension locally: `npm run build:mcpb`. Install the result in Claude Desktop to test it before tagging when the change touches startup, authentication, or bundling.
 
 ## Questions?
 

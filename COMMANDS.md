@@ -8,7 +8,7 @@ Quick reference for using TimeTree MCP Server with AI assistants.
 |------|-------------|
 | **list_calendars** | List all active calendars with participating users |
 | **get_events** | Get events from a calendar (with date filtering) |
-| **get_updated_events** | Get recently modified events (efficient sync) |
+| **get_updated_events** | Get recently modified or deleted events |
 | **create_event** | Create a new event |
 | **update_event** | Update an existing event |
 | **delete_event** | Delete an event |
@@ -71,7 +71,8 @@ When `start_before` is set, recurring events are expanded into each occurrence i
 
 ### get_updated_events
 
-Fetches only events modified after a timestamp. More efficient than `get_events` for checking recent changes.
+Returns only events modified after a timestamp, which suits "what changed?" questions better than `get_events`. The whole event feed is read and filtered by `updated_at`, since TimeTree's `since` parameter is a sync cursor rather than a date.
+Deleted events are included with `deleted: true` and `deleted_at`, so a deletion is not mistaken for an edit.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -99,6 +100,7 @@ Creates a new event in a calendar.
 | `start_timezone` | No | e.g., "Asia/Seoul" (default: UTC) |
 | `end_timezone` | No | e.g., "Asia/Seoul" (default: UTC) |
 | `label_id` | No | Color 1-10 (see [Label Colors](#label-colors)) |
+| `category` | No | Event category (default: 1, regular event; memos use `create_memo`) |
 | `note` | No | Event description |
 | `location` | No | Event location |
 | `url` | No | Related URL |
@@ -127,9 +129,12 @@ Updates an existing event. Only provide fields you want to change.
 | `event_uuid` | Yes | Event UUID (from `get_events`) |
 | `title` | No | New title |
 | `start_at` | No | New start time |
+| `start_timezone` | No | New start timezone |
 | `end_at` | No | New end time |
+| `end_timezone` | No | New end timezone |
 | `all_day` | No | Change all-day status |
 | `label_id` | No | New color |
+| `category` | No | Override the event category |
 | `note` | No | New description |
 | `location` | No | New location |
 | `url` | No | New URL; empty string removes it |
@@ -150,7 +155,7 @@ Updates an existing event. Only provide fields you want to change.
 
 ### delete_event
 
-Permanently deletes an event. Cannot be undone.
+Permanently deletes an event. Cannot be undone. Returns a "not found" error if the event does not exist or was already deleted.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -171,9 +176,11 @@ Manage TimeTree memos, which are stored by TimeTree as `category=2` all-day even
 | Tool | Key parameters |
 |------|----------------|
 | `list_memos` | `calendar_id`, optional `updated_after`, `limit` |
-| `create_memo` | `calendar_id`, `title`, optional `note`, `label_id`, `date`, `checklist`, `virtual_user_attendees` |
+| `create_memo` | `calendar_id`, `title`, optional `note`, `label_id`, `location`, `url`, `date`, `checklist`, `virtual_user_attendees` |
 | `update_memo` | `calendar_id`, `memo_uuid`, fields to change |
 | `delete_memo` | `calendar_id`, `memo_uuid` |
+
+`update_memo` and `delete_memo` only work on memos. Passing a regular event UUID returns an error instead of converting or deleting the event; use `update_event` or `delete_event` for those.
 
 **Example prompts:**
 - "Create a memo called Shopping List with checklist milk and eggs"
@@ -294,6 +301,6 @@ Call `create_calendar` with both `name` (1–20 characters) and an explicit `pur
 ```
 
 Supported purposes: `family`, `private`, `lover`, `work`, `friend`, `work_schedule`, `lesson`, `school_event`, `circle`, `hobby`, `other`.
-Creation does not invite members. Requests use rate limiting and retry only HTTP 429 rejections.
+Creation does not invite members. Requests use rate limiting and retry HTTP 429 rejections or rejected authentication through the shared client. Timeouts and server errors are not retried.
 Invalid input returns field-level reasons without input values. Authentication errors return `Authentication failed`.
 After an uncertain creation failure (such as a timeout), check existing calendars before retrying.

@@ -91,7 +91,7 @@ export const CreateCalendarInputSchema = z.object({
 export function createCreateCalendarTool(apiClient: TimeTreeAPIClient) {
   return {
     name: 'create_calendar',
-    description: 'Create a calendar owned by the authenticated user. Does not invite members or change existing calendars. Purpose is required; only rate-limited (429) requests are retried.',
+    description: 'Create a calendar owned by the authenticated user. Does not invite members or change existing calendars. Purpose is required. Requests are rate-limited; timeouts and server errors are not retried.',
     inputSchema: {
       type: 'object',
       properties: {
