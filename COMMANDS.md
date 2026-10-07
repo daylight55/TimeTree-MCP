@@ -284,3 +284,16 @@ Events can be color-coded with `label_id` 1-10:
 - **All-day events**: TimeTree uses inclusive end dates. A Feb 15-16 event sets `end_at` to Feb 16 00:00, not Feb 17.
 - **Timezones**: Default is UTC. Specify timezone for accurate local times.
 - **Write operations** (create/update/delete) require a CSRF token, which is managed automatically.
+
+### Create a calendar
+
+Call `create_calendar` with both `name` (1–20 characters) and an explicit `purpose`:
+
+```json
+{"name": "Project calendar", "purpose": "work"}
+```
+
+Supported purposes: `family`, `private`, `lover`, `work`, `friend`, `work_schedule`, `lesson`, `school_event`, `circle`, `hobby`, `other`.
+Creation does not invite members. Requests use rate limiting and retry only HTTP 429 rejections.
+Invalid input returns field-level reasons without input values. Authentication errors return `Authentication failed`.
+After an uncertain creation failure (such as a timeout), check existing calendars before retrying.

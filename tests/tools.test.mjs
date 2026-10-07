@@ -347,3 +347,39 @@ test('get_recent_activity names status codes, joins member names, and filters by
     ['memo-1', 'memo', true],
   ]);
 });
+
+test('create_calendar requires explicit purpose and returns only documented fields', async () => {
+  const {createCreateCalendarTool} = await import('../.test-dist/tools/calendar-tools.js');
+  const calls = [];
+  const tool = createCreateCalendarTool({createCalendar: async (...args) => {
+    calls.push(args); return {id: 123, name: 'Sample', alias_code: 'sample', extra: 'hidden'};
+  }});
+  assert.deepEqual(tool.inputSchema.required, ['name', 'purpose']);
+  assert.equal('default' in tool.inputSchema.properties.purpose, false);
+  assert.deepEqual(parseToolText(await tool.handler({name: 'Sample', purpose: 'work'})),
+    {id: '123', name: 'Sample', alias_code: 'sample'});
+  for (const args of [{name: 'Sample'}, {name: 'x'.repeat(21), purpose: 'work'},
+    {name: 'Sample', purpose: 'unsupported-input-value'}, {name: 'Sample', purpose: 'work', extra: 'hidden'}]) {
+    const result = await tool.handler(args);
+    assert.equal(result.isError, true);
+    assert.equal(parseToolText(result).error, 'Invalid calendar input');
+    assert.ok(parseToolText(result).issues.length);
+    assert.equal(JSON.stringify(result).includes('unsupported-input-value'), false);
+  }
+  assert.equal(calls.length, 1);
+});
+
+test('create_calendar distinguishes auth and uncertain failures without forwarding details', async () => {
+  const {createCreateCalendarTool} = await import('../.test-dist/tools/calendar-tools.js');
+  const {AuthenticationError} = await import('../.test-dist/client/auth.js');
+  for (const error of [new AuthenticationError('upstream detail'),
+    Object.assign(new Error('upstream detail'), {statusCode: 401}),
+    Object.assign(new Error('upstream detail'), {statusCode: 403}), new Error('upstream detail')]) {
+    const tool = createCreateCalendarTool({createCalendar: async () => {throw error;}});
+    const result = await tool.handler({name: 'Sample', purpose: 'work'});
+    assert.equal(result.isError, true);
+    assert.equal(JSON.stringify(result).includes('upstream detail'), false);
+    assert.equal(parseToolText(result).error, error instanceof AuthenticationError || error.statusCode === 401 || error.statusCode === 403
+      ? 'Authentication failed' : 'Calendar creation failed. Check existing calendars before retrying.');
+  }
+});

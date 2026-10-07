@@ -173,21 +173,28 @@ export class TimeTreeAPIClient {
     }
   }
 
-  /** Create a calendar owned by the authenticated user, without invitations.
-   * Uses the current web application's POST /api/v2/calendars contract.
-   * Never automatically retries a non-idempotent creation request.
-   */
-  async createCalendar(name: string, purpose: string = 'lover'): Promise<Calendar> {
+  /** Create a calendar without invitations. Retries only rejected (429) requests. */
+  async createCalendar(name: string, purpose: string): Promise<Calendar> {
     if (!name.trim() || name.trim().length > 20) {
       throw new TimeTreeAPIError('Calendar name must contain 1 to 20 characters', 400);
     }
     await this.ensureAuthenticated();
+    // Precondition check: writes require a CSRF token before sending the request.
     this.authManager.getCsrfToken();
-    const response = await this.authManager.getHttpClient().post<{ calendar: unknown }>(
-      `${TIMETREE_CONFIG.V2_BASE_URL}/calendars`,
-      { name: name.trim(), purpose }, undefined, true
-    );
-    return CalendarSchema.parse(response.calendar);
+    try {
+      const response = await this.rateLimiter.executeWithRetry(() =>
+        this.authManager.getHttpClient().post<{ calendar: unknown }>(
+          `${TIMETREE_CONFIG.V2_BASE_URL}/calendars`,
+          { name: name.trim(), purpose }, undefined, true
+        )
+      );
+      return CalendarSchema.parse(response.calendar);
+    } catch (error) {
+      if (getStatusCode(error) === 403) {
+        throw new TimeTreeAPIError('CSRF token missing or invalid - re-authentication required', 403);
+      }
+      throw error;
+    }
   }
 
   /** Recursively sync events from a calendar with automatic pagination. */

@@ -124,7 +124,7 @@ Then restart your MCP client.
 
 ### MCP Tools
 
-- **create_calendar** - Create a calendar with a name (1–20 characters) and purpose; no invitations
+- **create_calendar** - Create a calendar with a name (1–20 characters) and a required, explicit purpose; no invitations. Only HTTP 429 requests are retried
 - **list_calendars** - List all calendars with participating users
 - **get_events** - Get events from a calendar with auto-pagination, sorted by start time, with keyword/label/date filters and recurring occurrences expanded
 - **get_updated_events** - Get events updated after a specific timestamp (efficient incremental sync)
