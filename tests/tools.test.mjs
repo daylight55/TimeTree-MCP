@@ -383,3 +383,53 @@ test('create_calendar distinguishes auth and uncertain failures without forwardi
       ? 'Authentication failed' : 'Calendar creation failed. Check existing calendars before retrying.');
   }
 });
+
+test('create_calendar treats response validation errors as uncertain creation outcomes', async () => {
+  const {createCreateCalendarTool} = await import('../.test-dist/tools/calendar-tools.js');
+  const {TimeTreeAPIClient} = await import('../.test-dist/client/api.js');
+  for (const calendar of [
+    {id: 456, name: 'Sample', alias_code: null},
+    {id: 456, name: null, alias_code: 'sample'},
+  ]) {
+    let requests = 0;
+    const client = new TimeTreeAPIClient({
+      isAuthenticated: () => true,
+      getCsrfToken: () => 'synthetic-token',
+      getHttpClient: () => ({post: async () => {requests++; return {calendar};}}),
+    });
+    const result = await createCreateCalendarTool(client).handler({name: 'Sample', purpose: 'work'});
+
+    assert.equal(requests, 1);
+    assert.equal(result.isError, true);
+    assert.deepEqual(parseToolText(result), {
+      error: 'Calendar creation failed. Check existing calendars before retrying.',
+    });
+  }
+});
+
+test('create_calendar reports persistent TimeTree auth rejections as authentication failures', async () => {
+  const {createCreateCalendarTool} = await import('../.test-dist/tools/calendar-tools.js');
+  const {TimeTreeAPIClient} = await import('../.test-dist/client/api.js');
+  for (const [statusCode, code] of [[401, undefined], [400, -493], [422, -1]]) {
+    let requests = 0;
+    let signIns = 0;
+    const client = new TimeTreeAPIClient({
+      isAuthenticated: () => true,
+      authenticate: async () => {signIns++;},
+      getCsrfToken: () => 'synthetic-token',
+      getHttpClient: () => ({post: async () => {
+        requests++;
+        throw Object.assign(new Error('upstream detail'), {
+          statusCode, response: JSON.stringify({error: {code, message: 'upstream detail'}}),
+        });
+      }}),
+    });
+    const result = await createCreateCalendarTool(client).handler({name: 'Sample', purpose: 'work'});
+
+    assert.equal(requests, 2);
+    assert.equal(signIns, 1);
+    assert.equal(result.isError, true);
+    assert.deepEqual(parseToolText(result), {error: 'Authentication failed'});
+    assert.equal(JSON.stringify(result).includes('upstream detail'), false);
+  }
+});

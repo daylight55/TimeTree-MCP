@@ -121,7 +121,7 @@ GUI 클라이언트가 `node`를 찾지 못하면 `command -v node`로 나온 �
 | 기타 | `get_holidays`, `get_recent_activity` |
 
 `create_calendar`에는 이름(1~20자)과 명시적인 용도가 필수입니다. 멤버를 초대하지 않으며 시간 초과나 서버 오류는 재시도하지 않습니다.
-
+생성 응답을 검증할 수 없으면 다시 시도하기 전에 기존 캘린더를 확인하세요.
 
 파라미터와 사용 예시: [COMMANDS.md](COMMANDS.md)
 

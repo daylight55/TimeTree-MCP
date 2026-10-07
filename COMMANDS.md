@@ -303,4 +303,5 @@ Call `create_calendar` with both `name` (1–20 characters) and an explicit `pur
 Supported purposes: `family`, `private`, `lover`, `work`, `friend`, `work_schedule`, `lesson`, `school_event`, `circle`, `hobby`, `other`.
 Creation does not invite members. Requests use rate limiting and retry HTTP 429 rejections or rejected authentication through the shared client. Timeouts and server errors are not retried.
 Invalid input returns field-level reasons without input values. Authentication errors return `Authentication failed`.
-After an uncertain creation failure (such as a timeout), check existing calendars before retrying.
+Persistent TimeTree session or CSRF rejections are reported as authentication failures after one sign-in recovery attempt.
+After an uncertain creation failure (such as a timeout or an unexpected success response), check existing calendars before retrying. Response validation failures are not reported as invalid input. HTTP 5xx responses are never retried, even if their bodies contain authentication error codes.

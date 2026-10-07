@@ -123,6 +123,7 @@ Details: [docs/UPDATING.md](docs/UPDATING.md). Changes: [CHANGELOG.md](CHANGELOG
 Parameters and examples: [COMMANDS.md](COMMANDS.md)
 
 `create_calendar` requires a name (1–20 characters) and an explicit purpose. It does not invite members. Timeouts and server errors are not retried.
+If the creation response cannot be validated, check existing calendars before trying again.
 
 ## Privacy and security
 

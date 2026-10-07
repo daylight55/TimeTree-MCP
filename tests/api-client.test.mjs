@@ -21,7 +21,7 @@ function makeEvent(overrides = {}) {
   };
 }
 
-function makeClient(http) {
+function makeClient(http, auth = {}) {
   return new TimeTreeAPIClient({
     isAuthenticated: () => true,
     authenticate: async () => {
@@ -29,6 +29,7 @@ function makeClient(http) {
     },
     getHttpClient: () => http,
     getCsrfToken: () => "test-token",
+    ...auth,
   });
 }
 
@@ -308,4 +309,43 @@ test('createCalendar maps 403 without leaking the upstream error', async () => {
   const client = makeClient({post: async () => {throw Object.assign(new Error('upstream detail'), {statusCode: 403});}});
   await assert.rejects(client.createCalendar('Sample', 'work'), error =>
     error.name === 'TimeTreeAPIError' && error.statusCode === 403 && !error.message.includes('upstream detail'));
+});
+
+test('createCalendar never retries 5xx carrying session or CSRF error codes', async () => {
+  for (const statusCode of [500, 502, 503, 504]) {
+    for (const code of [-493, -1]) {
+      let requests = 0;
+      let signIns = 0;
+      const error = Object.assign(new Error('synthetic server failure'), {
+        statusCode, response: JSON.stringify({error: {code}}),
+      });
+      const client = makeClient({post: async () => {
+        requests++;
+        if (requests === 1) throw error;
+        return {calendar: {id: 456, name: 'Sample'}};
+      }}, {authenticate: async () => {signIns++;}});
+
+      await assert.rejects(client.createCalendar('Sample', 'work'), thrown => thrown === error);
+      assert.equal(requests, 1, `HTTP ${statusCode}, code ${code} was retried`);
+      assert.equal(signIns, 0);
+    }
+  }
+});
+
+test('createCalendar still recovers rejected authentication once', async () => {
+  for (const [statusCode, code] of [[401, undefined], [400, -493], [422, -1]]) {
+    let requests = 0;
+    let signIns = 0;
+    const client = makeClient({post: async () => {
+      requests++;
+      if (requests === 1) throw Object.assign(new Error('synthetic auth rejection'), {
+        statusCode, response: JSON.stringify({error: {code}}),
+      });
+      return {calendar: {id: 456, name: 'Sample'}};
+    }}, {authenticate: async () => {signIns++;}});
+
+    assert.equal((await client.createCalendar('Sample', 'work')).id, 456);
+    assert.equal(requests, 2);
+    assert.equal(signIns, 1);
+  }
 });

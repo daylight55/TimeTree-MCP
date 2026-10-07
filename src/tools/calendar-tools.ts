@@ -103,26 +103,27 @@ export function createCreateCalendarTool(apiClient: TimeTreeAPIClient) {
       additionalProperties: false,
     },
     handler: async (args: unknown) => {
+      const parsed = CreateCalendarInputSchema.safeParse(args);
+      if (!parsed.success) {
+        const issues = parsed.error.issues.map((issue) => ({
+          field: issue.path[0] === 'name' || issue.path[0] === 'purpose' ? issue.path[0] : 'input',
+          reason: issue.code === 'too_small' ? 'Must contain at least 1 character'
+            : issue.code === 'too_big' ? 'Must contain at most 20 characters'
+            : issue.code === 'invalid_enum_value' ? 'Choose a supported calendar purpose'
+            : issue.code === 'unrecognized_keys' ? 'Only name and purpose are allowed'
+            : 'Required field with a supported type and value',
+        }));
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'Invalid calendar input', issues,
+        }) }], isError: true };
+      }
+      // Response validation can fail after the calendar was created; keep it out of input errors.
       try {
-        const input = CreateCalendarInputSchema.parse(args);
-        const calendar = await apiClient.createCalendar(input.name, input.purpose);
+        const calendar = await apiClient.createCalendar(parsed.data.name, parsed.data.purpose);
         return { content: [{ type: 'text', text: JSON.stringify({
           id: String(calendar.id), name: calendar.name, alias_code: calendar.alias_code ?? null,
         }) }] };
       } catch (error) {
-        if (error instanceof z.ZodError) {
-          const issues = error.issues.map((issue) => ({
-            field: issue.path[0] === 'name' || issue.path[0] === 'purpose' ? issue.path[0] : 'input',
-            reason: issue.code === 'too_small' ? 'Must contain at least 1 character'
-              : issue.code === 'too_big' ? 'Must contain at most 20 characters'
-              : issue.code === 'invalid_enum_value' ? 'Choose a supported calendar purpose'
-              : issue.code === 'unrecognized_keys' ? 'Only name and purpose are allowed'
-              : 'Required field with a supported type and value',
-          }));
-          return { content: [{ type: 'text', text: JSON.stringify({
-            error: 'Invalid calendar input', issues,
-          }) }], isError: true };
-        }
         const statusCode = error && typeof error === 'object' && 'statusCode' in error
           ? error.statusCode : undefined;
         if (error instanceof AuthenticationError || statusCode === 401 || statusCode === 403) {

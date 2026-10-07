@@ -121,7 +121,7 @@ GUI クライアントが `node` を見つけられない場合は、`command -v
 | その他 | `get_holidays`, `get_recent_activity` |
 
 `create_calendar` は名前（1〜20文字）と用途の明示を必須とします。メンバー招待は行わず、タイムアウト・サーバーエラーでは再試行しません。
-
+作成後の応答を検証できない場合は、再実行前に既存のカレンダーを確認してください。
 
 パラメータと使用例: [COMMANDS.md](COMMANDS.md)
 
